@@ -145,12 +145,16 @@ def add_eval():
 		_estado=_json['estado']
 		_reactivos=''
 		_temp=''
+		print (_ids_reactivos)
+		#print (type(_ids_reactivos))
 		for i in range(len(_ids_reactivos)):
-			_temp+=_ids_reactivos[i]['id']
+			_temp+=str(_ids_reactivos[i]['id'])
+			#print (_temp)
 			_temp+=','
 		_reactivos=_temp[:-1]
+		print (_reactivos)
 		if _id_user and _materia and _fecha and _tipo and _ids_reactivos and _titulo_eval and _estado and request.method == 'POST':
-			sqlQuery = "INSERT INTO evaluacion(id_usuario, materia, fecha, tipo, ids_raectivos, titulo_eval, estado) VALUES(%s, %s, %s, %s, %s, %s, %s)"
+			sqlQuery = "INSERT INTO evaluacion(id_usuario, materia, fecha, tipo, ids_reactivos, titulo_eval, estado) VALUES(%s, %s, %s, %s, %s, %s, %s)"
 			bindData=(str(_id_user), str(_materia), str(_fecha), str(_tipo), str(_reactivos), str(_titulo_eval), str(_estado))
 			conn = mysql.connect()
 			cursor = conn.cursor(pymysql.cursors.DictCursor)
