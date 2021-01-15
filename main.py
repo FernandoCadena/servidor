@@ -249,31 +249,36 @@ def calif_eval():
 		conn = mysql.connect()
 		cursor = conn.cursor(pymysql.cursors.DictCursor)
 		_json = request.json
-		print (_json)
+		#print (_json)
 		_id_eval = _json['id_eval']
 		#_calificacion = _json['calificacion']
 		_respuestas = _json['respuestas']
 		_id_usuario = _json['id_usuario']
 		#_id_calificacion = _json['calificacion']
+		print (_respuestas)
 		_temp_cal=0
 		_cadena=''
 		_temp_cad=''
 		for i in range(len(_respuestas)):
 			_question=(_respuestas[i])['id'] 
 			_answer=(_respuestas[i])['resp']
+			print (_question)
+			print (_answer)
 			_temp_cad+=str(_question)+'-'+str(_answer)+','
-			cursor.execute("SELECT op_correcta FROM reactivo_opm WHERE id_reactivo =%s", _question)
+			cursor.execute("SELECT op_correcta FROM reactivo_opm WHERE id_reactivo =%s", str(_question))
 			_result=cursor.fetchone()
+			print (_result)
 			if(_answer==_result['op_correcta']):
 				_temp_cal+=1
 		_temp_final=(_temp_cal*100)/(len(_respuestas))
 		_cadena=_temp_cad[:-1]
-		if _id_eval and _cadena and _id_usuario and _temp_final and request.method == 'POST':
-			sqlQuery = "INSERT INTO calificacion VALUES(%s, %s, %s, %s, %s)"
-			bindData=(str(_id_eval), _temp_final, str(_cadena), str(_id_usuario))
+		print (_cadena)
+		if _id_eval and _cadena and _id_usuario and _result and request.method == 'POST':
+			sqlQuery = "INSERT INTO calificacion(id_eval, calificacion, respuestas, id_usuario) VALUES(%s, %s, %s, %s)" #=(SELECT id_usuario FROM usuario WHERE id_usuario= %s )
+			bindData=(str(_id_eval), str(_temp_final), str(_cadena),str(_id_usuario))
 			conn = mysql.connect()
 			cursor = conn.cursor(pymysql.cursors.DictCursor)
-			cursor.execute(sqlQuery, bindData)
+			print (cursor.execute(sqlQuery, bindData))
 			conn.commit()
 			respone = jsonify('La calificación se registro con Exito!')
 			respone.status_code = 200
