@@ -280,7 +280,8 @@ def calif_eval():
 			cursor = conn.cursor(pymysql.cursors.DictCursor)
 			print (cursor.execute(sqlQuery, bindData))
 			conn.commit()
-			respone = jsonify('La calificación se registro con Exito!')
+			respone = jsonify(calificaion=_temp_final)
+			print (respone)
 			respone.status_code = 200
 			return respone
 		else:
