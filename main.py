@@ -240,7 +240,7 @@ def obten_quiz():
 		_reactivos=[{"none":"none"}]
 		for i in range(len(reactivos)):
 			cursor = conn.cursor(pymysql.cursors.DictCursor)
-			cursor.execute("SELECT pregunta, op1, op2, op3, op4 FROM reactivo_opm WHERE id_reactivo=%s",str(reactivos[i]))
+			cursor.execute("SELECT id_reactivo, pregunta, op1, op2, op3, op4 FROM reactivo_opm WHERE id_reactivo=%s",str(reactivos[i]))
 			_reactivos.append(cursor.fetchone())
 		print (_reactivos)
 		respone = jsonify(_reactivos)
