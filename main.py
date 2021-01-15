@@ -64,17 +64,6 @@ def test():
 	return respone
 	
 
-@app.route('/c', methods=['GET'])
-def consulta():
-	sqlQuery = "SELECT * FROM usuario;"
-	conn = mysql.connect()
-	cursor = conn.cursor()
-	cursor.execute(sqlQuery)
-	conn.commit()
-	respone = jsonify('True')
-	respone.status_code = 200
-	return respone
-
 
 #curl -X POST -H 'Content-Type: application/json' -i 'http://127.0.0.1/add' --data '{"id_usuario":"102","nombre":"Fernando","apellidos":"cadena m","correo":"a@b.c","password":"test","role":"1"}'
 @app.route('/add', methods=['POST'])
@@ -237,7 +226,7 @@ def obten_quiz():
 		reactivos= empRows["ids_reactivos"].split(',')
 		print (reactivos[0])
 		cursor = conn.cursor(pymysql.cursors.DictCursor)
-		_reactivos=[{"none":"none"}]
+		_reactivos=[]
 		for i in range(len(reactivos)):
 			cursor = conn.cursor(pymysql.cursors.DictCursor)
 			cursor.execute("SELECT id_reactivo, pregunta, op1, op2, op3, op4 FROM reactivo_opm WHERE id_reactivo=%s",str(reactivos[i]))
@@ -253,6 +242,7 @@ def obten_quiz():
 		cursor.close() 
 		conn.close()
 
+
 @app.route('/calificar', methods=['POST'])
 def calif_eval():
 	try:
@@ -265,18 +255,22 @@ def calif_eval():
 		_respuestas = _json['respuestas']
 		_id_usuario = _json['id_usuario']
 		#_id_calificacion = _json['calificacion']
-		preguntas=_respuestas.split(',')
 		_temp_cal=0
-		for i in range(len(preguntas)):
-			_question=preguntas[i].split('-')[0]
-			_answer=preguntas[i].split('-')[1]
-			cursor.execute("SELECT op_correcta FROM reactivo_opm WHERE id_reactivc =%s", _question)
-			if(_answer==cursor.fetchone()):
+		_cadena=''
+		_temp_cad=''
+		for i in range(len(_respuestas)):
+			_question=(_respuestas[i])['id'] 
+			_answer=(_respuestas[i])['resp']
+			_temp_cad+=str(_question)+'-'+str(_answer)+','
+			cursor.execute("SELECT op_correcta FROM reactivo_opm WHERE id_reactivo =%s", _question)
+			_result=cursor.fetchone()
+			if(_answer==_result['op_correcta']):
 				_temp_cal+=1
-		_temp_final=((len(preguntas))/100)*_temp_cal
-		if _id_eval and _respuestas and _id_usuario and _temp_final and request.method == 'POST':
+		_temp_final=(_temp_cal*100)/(len(_respuestas))
+		_cadena=_temp_cad[:-1]
+		if _id_eval and _cadena and _id_usuario and _temp_final and request.method == 'POST':
 			sqlQuery = "INSERT INTO calificacion VALUES(%s, %s, %s, %s, %s)"
-			bindData=(str(_id_eval), _temp_final, str(_respuestas), str(_id_usuario))
+			bindData=(str(_id_eval), _temp_final, str(_cadena), str(_id_usuario))
 			conn = mysql.connect()
 			cursor = conn.cursor(pymysql.cursors.DictCursor)
 			cursor.execute(sqlQuery, bindData)
