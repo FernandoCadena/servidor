@@ -84,13 +84,12 @@ def upload_csv():
 	for i in range(1,len(_json['data'])-1):
 		_temp=(_json['data'])[i]
 		_dicc= (_temp['data'])
-
 		_pregunta = _dicc[0]
 		_resp = _dicc[1]
 		_tipo = _dicc[2]
 		_materia = _dicc[3]
 		_numOp = _dicc[4]
-		sqlQuery = "INSERT INTO reactivo (pregunta, opcion_correcta, tipo, materia) VALUES(%s, %s, %s, (SELECT id_materia FROM materia WHERE nombre=%s))"
+		sqlQuery = "INSERT INTO reactivo (pregunta, opcion_correcta, tipo, id_materia) VALUES(%s, %s, %s, (SELECT id_materia FROM materia WHERE nombre=%s))"
 		bindData=(str(_pregunta), str(_resp),str(_tipo), str(_materia))
 		conn = mysql.connect()
 		cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -98,10 +97,10 @@ def upload_csv():
 		conn.commit()
 		cursor.execute('SELECT id_reactivo FROM reactivo WHERE pregunta = %s', (_pregunta))
 		id_reactivo = cursor.fetchone()
-		for j in range(5,4+_numOp):
-			cursor.execute('INSERT INTO opcion VALUES(NULL,%s,%s,%s)', (id_reactivo,_dicc[j],chr(ord('a')+j-5)))
+		#print (id_reactivo['id_reactivo'])
+		for j in range(5,4+int(_numOp)+1):
+			cursor.execute('INSERT INTO opcion VALUES(NULL,%s,%s,%s)', (int(id_reactivo['id_reactivo']),_dicc[j],chr(ord('a')+j-5)))
 			conn.commit()
-
 	respone = jsonify('Reactivos cargados con Exito!')
 	respone.status_code = 200
 	cursor.close() 
