@@ -48,33 +48,7 @@ def token_required(f):
 
 
 ###TEST####
-#curl -X POST -H 'Content-Type: application/json' -i 'http://127.0.0.1/login' --data '{"username":"a@b.c","password":"test"}'
-@app.route('/login-test', methods=['GET', 'POST'])
-def test_login():
-	if request.method == 'POST':
-		# Create variables for easy access
-		_json = request.json
-		_user=_json['_correo']
-		_pass=_json['_password']
-		_hash=hashlib.sha512()
-		_hash.update(_pass.encode())
-		_hashdigest=str(_hash.hexdigest())
-		conn = mysql.connect()
-		cursor = conn.cursor()
-		cursor.execute('SELECT * FROM usuario WHERE correo = %s AND password = %s', (_user, _hashdigest,))
-		account = cursor.fetchone()
-		if account:
-			cursor.execute('SELECT id_usuario, nombre, apellidos, role FROM usuario WHERE correo= %s',(_user))
-			_info = cursor.fetchone()
-			respone = jsonify(_info)
-			respone.status_code = 200
-			return respone
-		else:
-			respone =jsonify('Incorrect username/password!')
-			respone.status_code=302
-			return respone
-	cursor.close() 
-	conn.close()
+
 ####
 """
 @app.route('/csv', methods=['POST'])
@@ -135,7 +109,7 @@ def upload_csv():
 	return respone
 
 
-#curl -X POST -H 'Content-Type: application/json' -i 'http://127.0.0.1/add' --data '{"id_usuario":"102","nombre":"Fernando","apellidos":"cadena m","correo":"a@b.c","password":"test","role":"1"}'
+#curl -X POST -H 'Content-Type: application/json' -i 'http://127.0.0.1:4443/add' --data '{"id_usuario":"103","nombre":"Fernando","apellidos":"cadena m","correo":"a@b.c","password":"test","role":"2"}'
 @app.route('/add', methods=['POST'])
 def add_emp():
 	try:
@@ -146,21 +120,83 @@ def add_emp():
 		_apellidos = _json['apellidos']
 		_correo = _json['correo']
 		_pass = _json['password']		
-		_role = _json['role']
-		_hash=hashlib.sha512()
+		_role = int(_json['role'])
+		_hash=hashlib.sha256()
 		_hash.update(_pass.encode())
 		_hashdigest=str(_hash.hexdigest())
 		print (_hashdigest)
 		if _id and _nombre and _apellidos and _correo and _pass and _role and request.method == 'POST':
-			sqlQuery = "INSERT INTO usuario VALUES(%s, %s, %s, %s, %s, %s)"
-			bindData=(str(_id), str(_nombre), str(_apellidos), str(_correo), str(_hashdigest), str(_role))
 			conn = mysql.connect()
 			cursor = conn.cursor(pymysql.cursors.DictCursor)
-			cursor.execute(sqlQuery, bindData)
-			conn.commit()
-			respone = jsonify('Registro Exitoso!')
-			respone.status_code = 200
-			return respone
+			if(_role==2):
+				_exist="SELECT * FROM alumno WHERE id_alumno=%s"
+				_bindData=(str(_id))
+				cursor.execute(_exist, _bindData)
+				_res=cursor.fetchone()
+				if (_res):
+					respone = jsonify({'message':'Alumno ya Existe'})
+					respone.status_code = 302
+					return respone
+				else:
+					_exist="SELECT id_usuario FROM usuario WHERE nombre=%s AND apellidos=%s AND correo=%s"
+					_bindData=(str(_nombre),str(_apellidos),str(_correo))
+					cursor.execute(_exist, _bindData)
+					print ("1")
+					_quest=cursor.fetchall()
+					if not _quest:	
+						sqlQuery = "INSERT INTO usuario VALUES('NULLL',%s, %s, %s, %s,0)"
+						bindData=(str(_nombre), str(_apellidos), str(_correo), str(_hashdigest))
+						cursor.execute(sqlQuery, bindData)
+						conn.commit()
+						sqlQuery="INSERT INTO alumno VALUES(%s,(SELECT id_usuario FROM usuario WHERE correo=%s))"
+						bindData=(str(_id),str(_correo))
+						cursor.execute(sqlQuery, bindData)
+						conn.commit()
+						respone = jsonify({'message':'Registro Exitoso!'})
+						respone.status_code = 200
+						return respone
+					else:
+						sqlQuery="INSERT INTO alumno VALUES(%s,(SELECT id_usuario FROM usuario WHERE correo=%s))"
+						bindData=(str(_id),str(_correo))
+						cursor.execute(sqlQuery, bindData)
+						conn.commit()
+						respone = jsonify({'message':'Registro Exitoso!'})
+						respone.status_code = 200
+						return respone
+			if (_role==1):
+				_exist="SELECT * FROM profesor WHERE id_profesor=%s"
+				_bindData=(str(_id))
+				cursor.execute(_exist, _bindData)
+				_res=cursor.fetchone()
+				if (_res):
+					respone = jsonify({'message':'Profesor ya Existe'})
+					respone.status_code = 302
+					return respone
+				else:
+					_exist="SELECT id_usuario FROM usuario WHERE nombre=%s AND apellidos=%s AND correo=%s"
+					_bindData=(str(_nombre),str(_apellidos),str(_correo))
+					cursor.execute(_exist, _bindData)
+					_quest=cursor.fetchone()
+					if not _quest:	
+						sqlQuery = "INSERT INTO usuario VALUES(NULL,%s, %s, %s, %s,0)"
+						bindData=(str(_nombre), str(_apellidos), str(_correo), str(_hashdigest))
+						cursor.execute(sqlQuery, bindData)
+						conn.commit()
+						sqlQuery="INSERT INTO profesor VALUES(%s,(SELECT id_usuario FROM usuario WHERE correo=%s))"
+						bindData=(str(_id),str(_correo))
+						cursor.execute(sqlQuery, bindData)
+						conn.commit()
+						respone = jsonify({'message':'Registro Exitoso!'})
+						respone.status_code = 200
+						return respone
+					else:
+						sqlQuery="INSERT INTO profesor VALUES(%s,(SELECT id_usuario FROM usuario WHERE correo=%s))"
+						bindData=(str(_id),str(_correo))
+						cursor.execute(sqlQuery, bindData)
+						conn.commit()
+						respone = jsonify({'message':'Registro Exitoso!'})
+						respone.status_code = 200
+						return respone
 		else:
 			return not_found()
 	except Exception as e:
