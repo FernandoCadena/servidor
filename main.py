@@ -1,5 +1,6 @@
 from functools import wraps
 import pymysql
+from werkzeug.datastructures import native_itermethods
 from werkzeug.wrappers import ResponseStreamMixin
 from app import app
 from config import SECRET_KEY, mysql, SALT
@@ -11,8 +12,9 @@ import os
 import base64
 from Crypto.Util.number import long_to_bytes
 import datetime
+from datetime import datetime
 import jwt
-
+import random
 
 ####DEFINICION DE FUNCIONES Y UTILIDADES#######
 
@@ -25,7 +27,7 @@ def padhex(cad):
 	return('0x'+new)
 
 def limpiar_cad(cadena):
-	bad_chars=['\'','"','#','&','(',')','[',']','{','}','-']
+	bad_chars=['\'','"','#','&','(',')','[',']','{','}','-','=','_']
 	for i in bad_chars:
 		cadena=cadena.replace(i,"")
 	return cadena
@@ -49,7 +51,7 @@ def token_required(f):
 ###TEST####
 #curl -X POST -H 'Content-Type: application/json,' -H 'x-access-tokens:' -i 'http://127.0.0.1/auth' 
 
-@app.route('/auth', methods=['POST'])
+"""@app.route('/auth', methods=['POST'])
 @token_required
 def auth(data):
 	rutas1=["/alumno","/profile"]
@@ -80,7 +82,7 @@ def auth(data):
 			return respone
 		else:
 			return not_found()
-	
+	"""
 
 """
 @app.route('/c', methods=['GET'])
@@ -115,38 +117,38 @@ def emp(data):
 		cursor.close() 
 		conn.close()
 
-
+#curl -X POST -H 'Content-Type: application/json' -H 'x-access-tokens: TOKEN' -i 'http://127.0.0.1:4443/crea-eval' --data '{"id_usuario":"102","materia":"Materia1","nombre_eval":"Evaluacion primer nivel","duracion":60,"ids_reactivos":[1,2,3,4,5]}'
 @app.route('/crea-eval', methods=['POST'])
 @token_required
-def add_eval(data):
+def add_eval(data):#data
 	try:
 		_json = request.json
 		print (_json)
 		#_id = _json['id_eval']
-		_id_eval = _json['id_evaluacion']
+		_id_eval=str(random.randint(1,21474)) +str(random.randint(1,83647))
 		_id_user = _json['id_usuario']
 		_materia = _json['materia']
-		_fecha = _json['date']
-		_tipo = _json['tipo']
 		_ids_reactivos = _json['ids_reactivos']
 		_titulo_eval=_json['nombre_eval']
-		_estado=_json['estado']
-		_reactivos=''
-		_temp=''
-		print (_ids_reactivos)
+		#_estado=_json['estado']
+		_duracion=_json['duracion']
+		#_temp=''
+		#print (_ids_reactivos)
 		#print (type(_ids_reactivos))
-		print (_reactivos)
-		if _id_user and _materia and _fecha and _tipo and _ids_reactivos and _titulo_eval and _estado and request.method == 'POST':
-			sqlQuery = "INSERT INTO evaluacion(id_evaluacion, id_materia, fecha, nombre_eval) VALUES(%s, (SELECT id_materia FROM materia WHERE nombre=%s), %s, %s)"
-			bindData=(str(_id_eval), str(_materia), str(_fecha), str(_titulo_eval), str(_estado))
+		if _id_user and _materia and  _ids_reactivos and _titulo_eval  and request.method == 'POST':
+			sqlQuery = "INSERT INTO evaluacion VALUES(%s,(SELECT id_materia FROM materia WHERE nombre=%s LIMIT 1),%s,1,%s) "
+			bindData=(int(_id_eval),str(_materia), str(_titulo_eval),int(_duracion))
 			conn = mysql.connect()
 			cursor = conn.cursor(pymysql.cursors.DictCursor)
 			cursor.execute(sqlQuery, bindData)
 			conn.commit()
 			for i in range(len(_ids_reactivos)):
-					sqlQuery = "INSERT INTO reactivo_evaluacion(evaluacion_id_evaluacion, reactivo_id_reactivo) VALUES(%s,%s)"
-					bindData=(str(_id_eval), str(_reactivos[i]))
-			respone = jsonify('Registro Exitoso!')
+					print(_ids_reactivos[i])
+					sqlQuery = "INSERT INTO reactivo_evaluacion values(%s,%s)"
+					bindData=(int(_id_eval), int(_ids_reactivos[i]))
+					cursor.execute(sqlQuery, bindData)
+			conn.commit()
+			respone = jsonify({"id_evaluacion":_id_eval})
 			respone.status_code = 200
 			return respone
 		else:
@@ -157,17 +159,35 @@ def add_eval(data):
 		cursor.close() 
 		conn.close()
 
-
+#curl -i 'http://127.0.0.1:4443/reactivos?materia=Materia1&nivel=Nivel1'
 @app.route('/reactivos')
-@token_required
-def filtro_reactivos(data):
+#@token_required
+def filtro_reactivos():#data
 	_materia=request.args.get('materia')#"test"
 	_nivel=request.args.get('nivel')
+	_nivel=limpiar_cad(_nivel)
+	_materia=limpiar_cad(_materia)
+	if(_nivel and _materia):
+		try:
+			conn = mysql.connect()
+			cursor = conn.cursor(pymysql.cursors.DictCursor)
+			SqlQuery="SELECT id_reactivo,pregunta FROM reactivo WHERE id_materia=(SELECT id_materia FROM materia WHERE nombre=%s AND nivel=%s LIMIT 1)"
+			bindData=(str(_materia),str(_nivel))
+			cursor.execute(SqlQuery,bindData)
+			empRows = cursor.fetchall()
+			respone = jsonify(empRows)
+			respone.status_code = 200
+			return respone
+		except Exception as e:
+			print(e)
+		finally:
+			cursor.close() 
+			conn.close()
 	if(_materia):
 		try:
 			conn = mysql.connect()
 			cursor = conn.cursor(pymysql.cursors.DictCursor)
-			cursor.execute("SELECT id_reactivo, pregunta, op1, op2, op3, op3, nivel, materia FROM reactivo_opm WHERE materia=%s",_materia)
+			cursor.execute("SELECT id_reactivo, pregunta FROM reactivo WHERE id_materia=(SELECT id_materia FROM materia WHERE nombre=%s",_materia)
 			empRows = cursor.fetchall()
 			respone = jsonify(empRows)
 			respone.status_code = 200
@@ -177,20 +197,8 @@ def filtro_reactivos(data):
 		finally:
 			cursor.close() 
 			conn.close()
-	if(_nivel):
-		try:
-			conn = mysql.connect()
-			cursor = conn.cursor(pymysql.cursors.DictCursor)
-			cursor.execute("SELECT id_reactivo, pregunta, op1, op2, op3, op3, nivel, materia FROM reactivo_opm WHERE nivel=%s",_nivel)
-			empRows = cursor.fetchall()
-			respone = jsonify(empRows)
-			respone.status_code = 200
-			return respone
-		except Exception as e:
-			print(e)
-		finally:
-			cursor.close() 
-			conn.close()
+	else:
+		return not_found()
 
 @app.route('/usr', methods=['POST'])
 def emp_id():
@@ -211,7 +219,7 @@ def emp_id():
 		conn.close()
 
 #Obtiene los reactivos de una determinada evaluacion por medio del ID de la evalicion 
-#curl -X POST -H 'Content-Type: application/json' -H 'x-access-tokens: TOKEN' -i 'http://127.0.0.1:4443/quiz' --data '{"eval":"1"}'
+#curl -X POST -H 'Content-Type: application/json' -H 'x-access-tokens: TOKEN' -i 'http://127.0.0.1:4443/obtener-eval' --data '{"eval":"1"}'
 @app.route('/obtener-eval',methods=['POST'])
 #@token_required
 def obten_quiz():#data
@@ -222,70 +230,57 @@ def obten_quiz():#data
 		cursor = conn.cursor(pymysql.cursors.DictCursor)
 		cursor.execute("SELECT reactivo_id_reactivo FROM reactivo_evaluacion WHERE evaluacion_id_evaluacion=%s",_quiz)
 		empRows = cursor.fetchall()
-		reactivos= empRows#["reactivo_id_reactivo"]
-		#print (reactivos)
+		reactivos = empRows#["reactivo_id_reactivo"]
+		print (reactivos)
 		cursor = conn.cursor(pymysql.cursors.DictCursor)
 		_reactivos=[{"id_evaluacion":_quiz}]
 		for i in range(len(reactivos)):
 			cursor = conn.cursor(pymysql.cursors.DictCursor)
 			cursor.execute("SELECT id_opcion,opcion,indice FROM opcion WHERE reactivo_id_reactivo=%s",str(reactivos[i]["reactivo_id_reactivo"]))
+			#_reactivos.append(reactivos[i])
 			_reactivos.append(cursor.fetchall())
 		print (_reactivos)		
 		respone = jsonify(_reactivos)
 		respone.status_code = 200
 		return respone
-
 	except Exception as e:
 		print(e)
 	finally:
 		cursor.close() 
 		conn.close()
 
-
+#
 @app.route('/calificar', methods=['POST'])
 #@token_required
 def calif_eval():#data
+	_date = datetime.now()
+	_fecha=str(_date.year)+':'+str(_date.month)+':'+str(_date.day)+' '+str(_date.hour)+':'+str(_date.min)+':'+str(_date.second) 
 	try:
 		conn = mysql.connect()
 		cursor = conn.cursor(pymysql.cursors.DictCursor)
 		_json = request.json
 		print (_json)
+		_id_usuario = _json['id_usuario']
+		_id_eval = _json['id_eval']
 		_respuestas=_json['respuestas']
 		#print (_respuestas[0]['idReactivo'])
 		_temp_cal=0
 		for i in _respuestas:
-			_indice=cursor.execute("SELECT opcion_correcta FROM reactivo WHERE id_reactivo =%s", i['idReactivo'])
-			_respuesta=cursor.execute("SELECT  FROM reactivo WHERE id_reactivo =%s",_indice)
-			if _respuesta==i['resp']:
-				_temp_cal+=1
-		
-		_temp_final=((len(_respuestas))/100)*_temp_cal
-		"""_id_eval = _json['id_eval']
-		#_calificacion = _json['calificacion']
-		_respuestas = _json['respuestas']
-		_id_usuario = _json['id_usuario']
-		#_id_calificacion = _json['calificacion']
-		preguntas=_respuestas.split(',')
-		_temp_cal=0
-		for i in range(len(preguntas)):
-			_question=preguntas[i].split('-')[0]
-			_answer=preguntas[i].split('-')[1]
-			cursor.execute("SELECT op_correcta FROM reactivo_opm WHERE id_reactivc =%s", _question)
-			if(_answer==cursor.fetchone()):
-				_temp_cal+=1
-		_temp_final=((len(preguntas))/100)*_temp_cal
-		if _id_eval and _respuestas and _id_usuario and _temp_final and request.method == 'POST':
-			sqlQuery = "INSERT INTO calificacion VALUES(%s, %s, %s, %s, %s)"
-			bindData=(str(_id_eval), _temp_final, str(_respuestas), str(_id_usuario))
-			conn = mysql.connect()
-			cursor = conn.cursor(pymysql.cursors.DictCursor)
+			sqlQuery = "INSERT INTO respuesta VALUES(%s,%s,%s,%s)"
+			bindData=(str(_id_usuario),i['idReactivo'], int(_id_eval),str(i['resp']))
 			cursor.execute(sqlQuery, bindData)
-			conn.commit()
-			respone = jsonify('La calificación se registro con Exito!')
-			respone.status_code = 200
-			return respone
-		else:
-			return not_found()"""
+			_indice=cursor.execute("SELECT opcion_correcta FROM reactivo WHERE id_reactivo =%s", i['idReactivo'])
+			if _indice==i['resp']:
+				_temp_cal+=1
+		conn.commit()
+		_temp_final=((len(_respuestas))/100)*_temp_cal
+		sqlQuery = "INSERT INTO evaluacion_alumno VALUES(NULL,%s,%s,%s,%s)"
+		bindData=(str(_id_usuario),int(_id_eval),int(_temp_final),str(_fecha))
+		cursor.execute(sqlQuery,bindData)
+		conn.commit()
+		respone = jsonify({"cal":_temp_cal})
+		respone.status_code = 200
+		return respone
 	except Exception as e:
 		print(e)
 	finally:
@@ -295,7 +290,7 @@ def calif_eval():#data
 
 @app.route('/update', methods=['PUT'])
 @token_required
-def update_emp():
+def update_emp(data):
 	try:
 		_json = request.json
 		_id = _json['id_usuario']
@@ -325,7 +320,7 @@ def update_emp():
 		
 @app.route('/delete/<int:id>', methods=['DELETE'])
 @token_required
-def delete_emp(id):
+def delete_emp(data,id):
 	try:
 		conn = mysql.connect()
 		cursor = conn.cursor()
@@ -340,8 +335,8 @@ def delete_emp(id):
 		cursor.close() 
 		conn.close()
 
-#curl -X POST -H 'Content-Type: application/json' -i 'http://127.0.0.1:4443/login' --data '{"username":"a@b.c","password":"test","rol":"alumno"}'
-#curl -X POST -H 'Content-Type: application/json' -i 'http://127.0.0.1:4443/login' --data '{"username":"a@b.c","password":"test","rol":"profesor"}'
+#curl -X POST -H 'Content-Type: application/json' -i 'http://127.0.0.1:4443/login' --data '{"username":"a@b.c","password":"test","rol":"2"}'
+#curl -X POST -H 'Content-Type: application/json' -i 'http://127.0.0.1:4443/login' --data '{"username":"a@b.c","password":"test","rol":"1"}'
 @app.route('/login', methods=['GET', 'POST'])
 def login():
 	if request.method == 'POST':
@@ -358,11 +353,11 @@ def login():
 		cursor = conn.cursor()
 		cursor.execute('SELECT id_usuario, nombre, apellidos, correo, activo FROM usuario WHERE correo = %s AND password = %s', (_user, _hashdigest))
 		account = cursor.fetchone()
-		if (_rol==1):
+		if (_rol=="1"):
 			cursor = conn.cursor()
 			cursor.execute('SELECT id_profesor FROM profesor WHERE usuario_id_usuario = %s', (account[0]))
 			_datos=cursor.fetchone()
-		if (_rol==2):
+		if (_rol=="2"):
 			cursor = conn.cursor()
 			cursor.execute('SELECT id_alumno FROM alumno WHERE usuario_id_usuario = %s', (account[0]))
 			_datos=cursor.fetchone()
@@ -375,7 +370,7 @@ def login():
 		_nom=account[1]+' '+account[2]
 		if account:
 			if account[4]==1:
-				access_token = jwt.encode({'id_usuario': _datos[0],'rol':_rol,'nombre':_nom, 'exp': datetime.datetime.utcnow()+datetime.timedelta(minutes=12000)},SECRET_KEY,algorithm="HS256")
+				access_token = jwt.encode({'id_usuario': _datos[0],'rol':_rol,'nombre':_nom, 'exp': datetime.datetime.utcnow()+datetime.timedelta(minutes=1200)},SECRET_KEY,algorithm="HS256")
 				respone = jsonify({'message':'Login Exitoso!','token': access_token })
 				respone.status_code = 200
 				return respone
@@ -532,7 +527,7 @@ def desing():
 
 #cargar reactivos
 @app.route('/csv', methods=['POST'])
-@token_required
+#@token_required
 def upload_csv():
 	_json = request.json
 	for i in range(1,len(_json['data'])-1):
@@ -544,7 +539,7 @@ def upload_csv():
 		_materia = _dicc[3]
 		_numOp = _dicc[4]
 		sqlQuery = "INSERT INTO reactivo (pregunta, opcion_correcta, tipo, id_materia) VALUES(%s, %s, %s, (SELECT id_materia FROM materia WHERE nombre=%s))"
-		bindData=(str(_pregunta), str(_resp),str(_tipo), str(_materia))
+		bindData=(_pregunta.encode('utf8'), str(_resp),str(_tipo), str(_materia))
 		conn = mysql.connect()
 		cursor = conn.cursor(pymysql.cursors.DictCursor)
 		cursor.execute(sqlQuery, bindData)
@@ -561,6 +556,36 @@ def upload_csv():
 	cursor.close() 
 	conn.close()
 	return respone
+
+
+@app.route('/add-reactivo', methods=['POST'])
+#@token_required
+def new_reactivo():
+	_json = request.json
+	_pregunta=_json['reactivo']
+	_resp = _json['opCorrecta']
+	_tipo = _json['tipo']
+	_materia = _json['materia']
+	_tipo = _json['tipo']
+	_opciones = _json['opciones']
+	sqlQuery = "INSERT INTO reactivo (pregunta, opcion_correcta, tipo, id_materia) VALUES(%s, %s, %s, (SELECT id_materia FROM materia WHERE nombre=%s LIMIT 1))"
+	bindData=(_pregunta.encode('utf8'), str(_resp),str(_tipo), str(_materia))
+	conn = mysql.connect()
+	cursor = conn.cursor(pymysql.cursors.DictCursor)
+	cursor.execute(sqlQuery, bindData)
+	conn.commit()
+	cursor.execute('SELECT id_reactivo FROM reactivo WHERE pregunta = %s', (_pregunta))
+	id_reactivo = cursor.fetchone()
+	#print (id_reactivo['id_reactivo'])
+	for j in _opciones:
+		cursor.execute('INSERT INTO opcion VALUES(NULL,%s,%s,%s)', (int(id_reactivo['id_reactivo']),_opciones[j]['op'],_opciones[j]['letra']))
+	conn.commit()
+	respone = jsonify('Reactivo cargado con Exito!')
+	respone.status_code = 200
+	cursor.close() 
+	conn.close()
+	return respone
+
 
 @app.errorhandler(404)
 def not_found(error=None):
