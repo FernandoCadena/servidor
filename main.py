@@ -1,4 +1,5 @@
 from functools import wraps
+from PyPDF2.pdf import PageObject
 import pymysql
 from werkzeug.datastructures import native_itermethods
 from werkzeug.wrappers import ResponseStreamMixin
@@ -12,9 +13,11 @@ import os
 import base64
 from Crypto.Util.number import long_to_bytes
 import datetime
-from datetime import datetime
 import jwt
 import random
+import PyPDF2
+import io
+
 
 ####DEFINICION DE FUNCIONES Y UTILIDADES#######
 
@@ -34,10 +37,10 @@ def limpiar_cad(cadena):
 def token_required(f):
 	@wraps(f,)
 	def decorated(*args, **kwargs):
-		if 'x-access-tokens' in request.headers:
-			token = request.headers['x-access-tokens']
+		if 'Authorization' in request.headers:
+			token = request.headers['Authorization']
 			print (token)
-		if not 'x-access-tokens' in request.headers:
+		if not 'Authorization' in request.headers:
 			return jsonify({'message':'Error no Token Header'},403)
 
 		if not token:
@@ -161,8 +164,8 @@ def add_eval(data):#data
 
 #curl -i 'http://127.0.0.1:4443/reactivos?materia=Materia1&nivel=Nivel1'
 @app.route('/reactivos')
-#@token_required
-def filtro_reactivos():#data
+@token_required
+def filtro_reactivos(data):#data
 	_materia=request.args.get('materia')#"test"
 	_nivel=request.args.get('nivel')
 	_nivel=limpiar_cad(_nivel)
@@ -171,7 +174,7 @@ def filtro_reactivos():#data
 		try:
 			conn = mysql.connect()
 			cursor = conn.cursor(pymysql.cursors.DictCursor)
-			SqlQuery="SELECT id_reactivo,pregunta FROM reactivo WHERE id_materia=(SELECT id_materia FROM materia WHERE nombre=%s AND nivel=%s LIMIT 1)"
+			SqlQuery="SELECT id_reactivo,pregunta,tipo FROM reactivo WHERE id_materia=(SELECT id_materia FROM materia WHERE nombre=%s AND nivel=%s LIMIT 1)"
 			bindData=(str(_materia),str(_nivel))
 			cursor.execute(SqlQuery,bindData)
 			empRows = cursor.fetchall()
@@ -221,8 +224,8 @@ def emp_id():
 #Obtiene los reactivos de una determinada evaluacion por medio del ID de la evalicion 
 #curl -X POST -H 'Content-Type: application/json' -H 'x-access-tokens: TOKEN' -i 'http://127.0.0.1:4443/obtener-eval' --data '{"eval":"1"}'
 @app.route('/obtener-eval',methods=['POST'])
-#@token_required
-def obten_quiz():#data
+@token_required
+def obten_quiz(data):#data
 	_json = request.json
 	_quiz=_json['eval']#"test"
 	try:
@@ -251,9 +254,9 @@ def obten_quiz():#data
 
 #
 @app.route('/calificar', methods=['POST'])
-#@token_required
-def calif_eval():#data
-	_date = datetime.now()
+@token_required
+def calif_eval(data):#data
+	_date = datetime.datetime.now()
 	_fecha=str(_date.year)+':'+str(_date.month)+':'+str(_date.day)+' '+str(_date.hour)+':'+str(_date.min)+':'+str(_date.second) 
 	try:
 		conn = mysql.connect()
@@ -365,24 +368,27 @@ def login():
 		conn.close()
 		#print(_hashdigest)
 		print(account)
-		print(_datos)
-		#print(type(account))
-		_nom=account[1]+' '+account[2]
-		if account:
-			if account[4]==1:
-				access_token = jwt.encode({'id_usuario': _datos[0],'rol':_rol,'nombre':_nom, 'exp': datetime.datetime.utcnow()+datetime.timedelta(minutes=1200)},SECRET_KEY,algorithm="HS256")
-				respone = jsonify({'message':'Login Exitoso!','token': access_token })
-				respone.status_code = 200
-				return respone
+		if (_datos):
+			#print(type(account))
+			_nom=account[1]+' '+account[2]
+			if account:
+				if account[4]==1:
+					access_token = jwt.encode({'id_usuario': _datos[0],'rol':_rol,'nombre':_nom, 'exp': datetime.datetime.utcnow()+datetime.timedelta(minutes=1200)},SECRET_KEY,algorithm="HS256")
+					respone = jsonify({'message':'Login Exitoso!','token': access_token })
+					respone.status_code = 200
+					return respone
+				else:
+					respone = jsonify({'message':'Usuario inactivo, contacta al administrador'})
+					respone.status_code = 200
+					return respone	
 			else:
-				respone = jsonify({'message':'Usuario inactivo, contacta al administrador'})
-				respone.status_code = 200
-				return respone	
+				respone =jsonify({'message':'Incorrect username/password!'})
+				respone.status_code=301
+				return respone
 		else:
-			respone =jsonify({'message':'Incorrect username/password!'})
-			respone.status_code=302
+			respone =jsonify({'message':'Usuario incorrecto/Usuario no registrado'})
+			respone.status_code=301
 			return respone
-
 
 
 #curl -X POST -H 'Content-Type: application/json' -i 'http://127.0.0.1:4443/add' --data '{"id_usuario":"103","nombre":"Fernando","apellidos":"cadena m","correo":"a@b.c","password":"test","role":"2"}'
@@ -506,14 +512,28 @@ def signature(data):
 #curl -X POST -H 'Content-Type: application/json' -i 'http://127.0.0.1/validaFirma' --data '{"data":"hola","firma":"b'WSbh21czm9VSV8dQQDWcgew00EvV2evlCdSFbTEExoyDhub8Xh5dCenGdazlU9HTzEggmaOqUsihLyHzSlkadrCtui+3aaJgI4sU4MO4vBuOZKQ96iHGtkWNNW2XjP+waAVTy6N5fsI2+lId8E4OUXc6nYeqCtk2EpphaeFqLzCAIi1l09zXNW5gYUjKlvT0oMomXLEOZbaENwZngpYrhNknYWVuQMw99YuMLeiaC2gBJFLvdCl+p0MJmDV85iE+Zcya7Dw9DzZm8kSqIL6XUCMS9LVN1R7FmjHIr5/PzCFgKr3QzOJPeLoabXH/UR9ALmecq1vG1aqdj4SGqbnPxw=='"}'
 @app.route('/validaFirma', methods=['POST'])
 @token_required
-def desing():
+def desing(data):
 	key = RSA.importKey(open('test1.pem',"r").read())
 	_n=key.n
 	_e=key.e
 	if request.method == 'POST':
-		#
+		#	
 		_json = request.json
-		_Element=_json['data']
+		_pdf=_json['archivo']
+		_file=base64.b64decode(_pdf)
+		document=io.BytesIO(_file)
+		pdfRead=PyPDF2.PdfFileReader(document)
+		page=pdfRead.getPage(0)
+		_datos=page.extractText()
+		inicio_firma=_datos.find("$$")
+		fin_firma=_datos.find("$$$")
+		inicio_cadena=_datos.find("@@")
+		fin_cadena=_datos.find("@@@")
+		_Element=_datos[inicio_cadena+2:fin_cadena]
+		_Element.replace("-\n","")
+		_firma=_datos[inicio_firma+2:fin_firma]
+		#_json = request.json
+		#_Element=_json['data']
 		hash=hashlib.sha256()
 		hash.update(_Element.encode())
 		_firma=_json['firma']
@@ -527,8 +547,8 @@ def desing():
 
 #cargar reactivos
 @app.route('/csv', methods=['POST'])
-#@token_required
-def upload_csv():
+@token_required
+def upload_csv(data):
 	_json = request.json
 	for i in range(1,len(_json['data'])-1):
 		_temp=(_json['data'])[i]
@@ -559,14 +579,14 @@ def upload_csv():
 
 
 @app.route('/add-reactivo', methods=['POST'])
-#@token_required
-def new_reactivo():
+@token_required
+def new_reactivo(data):
 	_json = request.json
+	print(_json)
 	_pregunta=_json['reactivo']
 	_resp = _json['opCorrecta']
 	_tipo = _json['tipo']
 	_materia = _json['materia']
-	_tipo = _json['tipo']
 	_opciones = _json['opciones']
 	sqlQuery = "INSERT INTO reactivo (pregunta, opcion_correcta, tipo, id_materia) VALUES(%s, %s, %s, (SELECT id_materia FROM materia WHERE nombre=%s LIMIT 1))"
 	bindData=(_pregunta.encode('utf8'), str(_resp),str(_tipo), str(_materia))
@@ -577,8 +597,10 @@ def new_reactivo():
 	cursor.execute('SELECT id_reactivo FROM reactivo WHERE pregunta = %s', (_pregunta))
 	id_reactivo = cursor.fetchone()
 	#print (id_reactivo['id_reactivo'])
+	print (_opciones[0]['op'])
 	for j in _opciones:
-		cursor.execute('INSERT INTO opcion VALUES(NULL,%s,%s,%s)', (int(id_reactivo['id_reactivo']),_opciones[j]['op'],_opciones[j]['letra']))
+		print(j)
+		cursor.execute('INSERT INTO opcion VALUES(NULL,%s,%s,%s)', (int(id_reactivo['id_reactivo']),j['op'],(j['letra'].lower())))
 	conn.commit()
 	respone = jsonify('Reactivo cargado con Exito!')
 	respone.status_code = 200
