@@ -1,4 +1,4 @@
-from functools import wraps
+from functools import cached_property, wraps
 from PyPDF2.pdf import PageObject
 import pymysql
 from werkzeug.datastructures import native_itermethods
@@ -54,6 +54,22 @@ def token_required(f):
 ###TEST####
 #curl -X POST -H 'Content-Type: application/json,' -H 'x-access-tokens:' -i 'http://127.0.0.1/auth' 
 
+
+def firmar(data):
+	key = RSA.importKey(open('test1.pem',"r").read())
+	_d=key.d
+	_n=key.n
+	_Element=data
+	h=hashlib.sha256()
+	h.update(_Element.encode())
+	_hash=h.hexdigest()
+	_hash=padhex(_hash)
+	_sing=pow(int(_hash,16),_d,_n)
+	_firma=str(base64.b64encode(long_to_bytes(_sing)).decode("utf-8"))
+	return _firma
+
+
+
 """@app.route('/auth', methods=['POST'])
 @token_required
 def auth(data):
@@ -87,31 +103,32 @@ def auth(data):
 			return not_found()
 	"""
 
-"""
-@app.route('/c', methods=['GET'])
-def consulta():
-	sqlQuery = "SELECT * FROM usuario;"
-	conn = mysql.connect()
-	cursor = conn.cursor()
-	cursor.execute(sqlQuery)
-	conn.commit()
-	respone = jsonify('True')
-	respone.status_code = 200
-	return respone
-"""
 
 
-#curl -X GET -i 'http://127.0.0.1:5000/profile?id=test'
-@app.route('/profile')
-@token_required
-def emp(data):
+#curl -X GET -i 'http://127.0.0.1:4443/pdf?id=test'
+@app.route('/pdf')
+#@token_required
+def emp():
 	_id=request.args.get('id')#"test"
 	try:
 		conn = mysql.connect()
 		cursor = conn.cursor(pymysql.cursors.DictCursor)
-		cursor.execute("SELECT id_usuario, nombre, correo FROM usuario WHERE id_usuario=%s",_id)
-		empRows = cursor.fetchall()
-		respone = jsonify(empRows)
+		cursor.execute("SELECT * FROM evaluacion_alumno INNER JOIN evaluacion_profesor ON evaluacion_alumno.evaluacion_id_evaluacion=evaluacion_profesor.evaluacion_id_evaluacion WHERE alumno_id_alumno=%s",_id)
+		_temp=cursor.fetchone()
+		cursor.execute("SELECT nombre FROM materia WHERE id_materia=(SELECT id_materia FROM evaluacion WHERE id_evaluacion=%s)",_temp['evaluacion_id_evaluacion'])
+		_materia=cursor.fetchone()
+		_temp['materia']=_materia['nombre']
+		print (_temp)
+		print(type(_temp))
+		cursor.execute("SELECT nombre, apellidos FROM usuario WHERE id_usuario=(SELECT usuario_id_usuario FROM alumno WHERE id_alumno=%s)",_temp['alumno_id_alumno'])
+		_name=cursor.fetchone()
+		_nombre=_name['nombre']+" "+_name['apellidos']
+		_cadena=str(_temp['alumno_id_alumno'])+"||"+str(_temp['evaluacion_id_evaluacion'])+"||"+str(_temp['materia'])+"||"+str(_temp['calificacion'])+"||"+str(_temp['fecha_aplicacion'])+"||"+str(_nombre)
+		print(_cadena)
+		_firma=firmar(_cadena)
+		_temp["cadena"]=_cadena
+		_temp["firma"]=_firma
+		respone = jsonify(_temp)
 		respone.status_code = 200
 		return respone
 	except Exception as e:
@@ -119,6 +136,8 @@ def emp(data):
 	finally:
 		cursor.close() 
 		conn.close()
+
+
 
 #curl -X POST -H 'Content-Type: application/json' -H 'x-access-tokens: TOKEN' -i 'http://127.0.0.1:4443/crea-eval' --data '{"id_usuario":"102","materia":"Materia1","nombre_eval":"Evaluacion primer nivel","duracion":60,"ids_reactivos":[1,2,3,4,5]}'
 @app.route('/crea-eval', methods=['POST'])
@@ -224,8 +243,8 @@ def emp_id():
 #Obtiene los reactivos de una determinada evaluacion por medio del ID de la evalicion 
 #curl -X POST -H 'Content-Type: application/json' -H 'x-access-tokens: TOKEN' -i 'http://127.0.0.1:4443/obtener-eval' --data '{"eval":"1"}'
 @app.route('/obtener-eval',methods=['POST'])
-@token_required
-def obten_quiz(data):#data
+#@token_required
+def obten_quiz():#data
 	_json = request.json
 	_quiz=_json['eval']#"test"
 	try:
@@ -234,16 +253,15 @@ def obten_quiz(data):#data
 		cursor.execute("SELECT reactivo_id_reactivo FROM reactivo_evaluacion WHERE evaluacion_id_evaluacion=%s",_quiz)
 		empRows = cursor.fetchall()
 		reactivos = empRows#["reactivo_id_reactivo"]
-		print (reactivos)
 		cursor = conn.cursor(pymysql.cursors.DictCursor)
 		_reactivos=[{"id_evaluacion":_quiz}]
 		for i in range(len(reactivos)):
 			cursor = conn.cursor(pymysql.cursors.DictCursor)
-			cursor.execute("SELECT id_opcion,opcion,indice FROM opcion WHERE reactivo_id_reactivo=%s",str(reactivos[i]["reactivo_id_reactivo"]))
+			cursor.execute("SELECT id_opcion,opcion,indice FROM opcion WHERE reactivo_id_reactivo=%s LIMIT 1",str(reactivos[i]["reactivo_id_reactivo"]))
 			#_reactivos.append(reactivos[i])
-			_reactivos.append(cursor.fetchall())
-		print (_reactivos)		
-		respone = jsonify(_reactivos)
+			reactivos[i]["opciones"]=cursor.fetchall()
+		print (reactivos)		
+		respone = jsonify(reactivos)
 		respone.status_code = 200
 		return respone
 	except Exception as e:
@@ -269,12 +287,15 @@ def calif_eval(data):#data
 		#print (_respuestas[0]['idReactivo'])
 		_temp_cal=0
 		for i in _respuestas:
-			sqlQuery = "INSERT INTO respuesta VALUES(%s,%s,%s,%s)"
+			sqlQuery = "INSERT INTO respuesta_alumno_reactivo VALUES(%s,%s,%s,%s)"
 			bindData=(str(_id_usuario),i['idReactivo'], int(_id_eval),str(i['resp']))
 			cursor.execute(sqlQuery, bindData)
-			_indice=cursor.execute("SELECT opcion_correcta FROM reactivo WHERE id_reactivo =%s", i['idReactivo'])
-			if _indice==i['resp']:
-				_temp_cal+=1
+			_indice=cursor.execute("SELECT opcion_correcta,tipo FROM reactivo WHERE id_reactivo =%s", i['idReactivo'])
+			if _indice['tipo']=="ra":
+				s#calificar RAs
+			else:
+				if _indice['opcion_correcta']==i['resp']:
+					_temp_cal+=1
 		conn.commit()
 		_temp_final=((len(_respuestas))/100)*_temp_cal
 		sqlQuery = "INSERT INTO evaluacion_alumno VALUES(NULL,%s,%s,%s,%s)"
