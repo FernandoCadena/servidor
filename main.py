@@ -674,7 +674,8 @@ def new_reactivo(data):
 
 
 @app.route('/users', methods=['GET', 'POST'])
-def get_users():
+@token_required
+def get_users(data):
 	if request.method == 'GET':
 		conn = mysql.connect()
 		cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -694,28 +695,46 @@ def get_users():
 		cursor.execute("UPDATE usuario set activo=1 WHERE id_usuario=%s",_id_user)
 
 @app.route('/add-materia', methods=['GET', 'POST'])
-def add_materia():
+@token_required
+def add_materia(data):
 	if request.method == 'POST':
 		_json = request.json
 		materia=_json['materia']
 		nivel=_json['nivel']
 		conn = mysql.connect()
+		print(materia)
+		print(_json)
 		cursor = conn.cursor(pymysql.cursors.DictCursor)
-		cursor.execute("INSERT INTO materia VALUES(NULL,%s,%s)",materia,nivel)
-		respone = jsonify({"message":"Materia agregada con exito"})
-		respone.status_code = 200
-		cursor.close()
-		conn.close()
+		var=cursor.execute("SELECT * FROM materia WHERE nombre=%s",materia)
+		if var:
+			respone = jsonify({"message":"Error"})
+			respone.status_code = 301
+		else:	
+			cursor.execute("INSERT INTO materia VALUES(NULL,%s,%s)",(materia,nivel))
+			conn.commit()
+			respone = jsonify({"message":"Materia agregada con exito"})
+			respone.status_code = 200
+			cursor.close()
+			conn.close()
+	else:
+		return not_found
 
-@app.route('/users', methods=['GET', 'POST'])
-def get_users():
-	if request.method == 'GET':
-		conn = mysql.connect()
-		cursor = conn.cursor(pymysql.cursors.DictCursor)
-		cursor.execute("SELECT id_usuario,nombre,apellidos FROM usuario WHERE activo=0")
-		_data=cursor.fetchall()
-		print(_data)
-		respone = jsonify(_data)
+
+@app.route('/alta', methods=['GET', 'POST'])
+@token_required
+def alta(data):
+	if request.method == 'POST':
+		_json = request.json
+		id=_json['id']
+		si=_json['autorizar']
+		if si==1:
+			conn = mysql.connect()
+			cursor = conn.cursor(pymysql.cursors.DictCursor)
+			cursor.execute("UPDATE usuario set activo=1 WHERE id_usuario=",(id))
+		else:
+			return not_found
+
+		respone = jsonify({"message":"ok"})
 		respone.status_code = 200
 		cursor.close()
 		conn.close()
