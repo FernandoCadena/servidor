@@ -292,7 +292,10 @@ def calif_eval(data):#data
 			cursor.execute(sqlQuery, bindData)
 			_indice=cursor.execute("SELECT opcion_correcta,tipo FROM reactivo WHERE id_reactivo =%s", i['idReactivo'])
 			if _indice['tipo']=="ra":
-				s#calificar RAs
+				_ra=cursor.execute("SELECT opcion FROM reactivo WHERE id_reactivo=%s",i['idReactivo'])
+				_Rra=i['resp']
+				if(_ra==_Rra):
+					_temp_cal+=1
 			else:
 				if _indice['opcion_correcta']==i['resp']:
 					_temp_cal+=1
