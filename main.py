@@ -183,8 +183,8 @@ def add_eval(data):#data
 
 #curl -i 'http://127.0.0.1:4443/reactivos?materia=Materia1&nivel=Nivel1'
 @app.route('/reactivos')
-@token_required
-def filtro_reactivos(data):#data
+#@token_required
+def filtro_reactivos():#data
 	_materia=request.args.get('materia')#"test"
 	_nivel=request.args.get('nivel')
 	_nivel=limpiar_cad(_nivel)
@@ -414,6 +414,46 @@ def login():
 			respone.status_code=301
 			return respone
 
+@app.route('/admin-auth', methods=['GET', 'POST'])
+def login_admin():
+	if request.method == 'POST':
+		# Create variables for easy access
+		_json = request.json
+		_user=_json['username']
+		_pass=_json['password']
+		_rol=0
+		_user=limpiar_cad(_user)
+		_hash=hashlib.sha256()
+		_hash.update(SALT.encode()+_pass.encode())
+		_hashdigest=str(_hash.hexdigest())
+		conn = mysql.connect()
+		cursor = conn.cursor()
+		cursor.execute('SELECT id_usuario, nombre, apellidos FROM usuario WHERE correo = %s AND password = %s', (_user, _hashdigest))
+		account = cursor.fetchone()
+		cursor = conn.cursor()
+		cursor.execute('SELECT id_administrador FROM administrador WHERE usuario_id_usuario = %s', (account[0]))
+		_datos=cursor.fetchone()
+		cursor.close() 
+		conn.close()
+		#print(_hashdigest)
+		print(account)
+		if (_datos):
+			#print(type(account))
+			_nom=account[1]+' '+account[2]
+			if account:
+				access_token = jwt.encode({'id_usuario': _datos[0],'rol':_rol,'nombre':_nom, 'exp': datetime.datetime.utcnow()+datetime.timedelta(minutes=1200)},SECRET_KEY,algorithm="HS256")
+				respone = jsonify({'message':'Login Exitoso!','token': access_token })
+				respone.status_code = 200
+				return respone
+				
+			else:
+				respone =jsonify({'message':'Incorrect username/password!'})
+				respone.status_code=301
+				return respone
+		else:
+			respone =jsonify({'message':'Usuario incorrecto/Usuario no registrado'})
+			respone.status_code=301
+			return respone
 
 #curl -X POST -H 'Content-Type: application/json' -i 'http://127.0.0.1:4443/add' --data '{"id_usuario":"103","nombre":"Fernando","apellidos":"cadena m","correo":"a@b.c","password":"test","role":"2"}'
 @app.route('/add', methods=['POST'])
@@ -632,6 +672,54 @@ def new_reactivo(data):
 	conn.close()
 	return respone
 
+
+@app.route('/users', methods=['GET', 'POST'])
+def get_users():
+	if request.method == 'GET':
+		conn = mysql.connect()
+		cursor = conn.cursor(pymysql.cursors.DictCursor)
+		cursor.execute("SELECT id_usuario,nombre,apellidos FROM usuario WHERE activo=0")
+		_data=cursor.fetchall()
+		print(_data)
+		respone = jsonify(_data)
+		respone.status_code = 200
+		cursor.close()
+		conn.close()
+		return respone
+	if request.method == 'POST':
+		_json = request.json
+		_id_user=_json['id_user']
+		conn = mysql.connect()
+		cursor = conn.cursor(pymysql.cursors.DictCursor)
+		cursor.execute("UPDATE usuario set activo=1 WHERE id_usuario=%s",_id_user)
+
+@app.route('/add-materia', methods=['GET', 'POST'])
+def add_materia():
+	if request.method == 'POST':
+		_json = request.json
+		materia=_json['materia']
+		nivel=_json['nivel']
+		conn = mysql.connect()
+		cursor = conn.cursor(pymysql.cursors.DictCursor)
+		cursor.execute("INSERT INTO materia VALUES(NULL,%s,%s)",materia,nivel)
+		respone = jsonify({"message":"Materia agregada con exito"})
+		respone.status_code = 200
+		cursor.close()
+		conn.close()
+
+@app.route('/users', methods=['GET', 'POST'])
+def get_users():
+	if request.method == 'GET':
+		conn = mysql.connect()
+		cursor = conn.cursor(pymysql.cursors.DictCursor)
+		cursor.execute("SELECT id_usuario,nombre,apellidos FROM usuario WHERE activo=0")
+		_data=cursor.fetchall()
+		print(_data)
+		respone = jsonify(_data)
+		respone.status_code = 200
+		cursor.close()
+		conn.close()
+		return respone
 
 @app.errorhandler(404)
 def not_found(error=None):
