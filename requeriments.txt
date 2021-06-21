@@ -2,13 +2,10 @@ PyMySQL
 pycrypto
 pycryptodome
 crypto
-base64
-hashlib
 flask
 Flask-MySQL
 flask-mysql
 Flask-Cors
 PyPDF2
-functools
 PyJWT
 jwt
